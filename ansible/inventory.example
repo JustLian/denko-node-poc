@@ -1,0 +1,8 @@
+[proxy]
+# Replace with your VPS IP or hostname
+vps ansible_host=154.83.95.27 ansible_user=root
+
+[proxy:vars]
+# Copy to group_vars/all.yml (see group_vars/all.example.yml)
+# proxy_domain=pocjp.denko.app
+# letsencrypt_email=me@rian.moe

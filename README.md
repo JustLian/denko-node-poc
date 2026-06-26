@@ -52,6 +52,23 @@ sudo ufw allow 80/tcp   # only needed for initial cert + renewals
 
 ## Quick start (automated)
 
+### Option A — Ansible from your laptop (Ubuntu 22.04 VPS)
+
+Fully automates OS packages, Docker, firewall, deploy, and bootstrap. See [`ansible/README.md`](ansible/README.md).
+
+```bash
+# On your laptop
+cd ansible
+ansible-galaxy collection install -r requirements.yml
+cp inventory.example inventory
+cp group_vars/all.example.yml group_vars/all.yml
+# Edit inventory + group_vars/all.yml
+
+ansible-playbook playbook.yml
+```
+
+### Option B — Manual bootstrap on the VPS
+
 Clone this repository onto your VPS, then run the bootstrap script as root (certbot requires it):
 
 ```bash
@@ -72,6 +89,29 @@ The script will:
 5. Copy certs to `./certs/` and start `docker compose up -d`
 6. Optionally install renewal automation
 7. Print a ready-to-import VLESS URI
+
+### Transport profiles (TCP vs xHTTP)
+
+Two Reality transports share the same Self-Stealth Nginx fallback. Choose at install time:
+
+| Profile | Command | When to use |
+|---------|---------|-------------|
+| **TCP + Vision** (default) | `--transport tcp` | Broad client support; direct connect |
+| **xHTTP + stream-one** | `--transport xhttp` | TSPU-oriented; resists long-session TCP throttling |
+
+```bash
+# TSPU-oriented alternative (no Vision — incompatible with xHTTP)
+sudo python3 scripts/setup.py \
+  --domain example.com \
+  --email you@example.com \
+  --transport xhttp \
+  --install-cron \
+  --install-renewal-hook
+```
+
+Full rationale, TSPU notes, and client examples: [`docs/transports.md`](docs/transports.md).
+
+Ansible: set `proxy_transport: xhttp` in `group_vars/all.yml`.
 
 ## Manual setup
 
@@ -99,9 +139,13 @@ Generate an 8-character hex short ID (example):
 python3 -c "import secrets; print(secrets.token_hex(4))"
 ```
 
-### 2. Edit `xray/config.json`
+### 2. Edit Xray config
 
-Replace the placeholders:
+Copy a profile and edit placeholders, or let `setup.py` do this automatically:
+
+```bash
+cp xray/profiles/tcp.json xray/config.json    # or profiles/xhttp.json
+```
 
 | Placeholder | Value |
 |-------------|-------|
@@ -109,6 +153,9 @@ Replace the placeholders:
 | `<YOUR_DOMAIN>` | Your domain (e.g. `example.com`) |
 | `<REALITY_PRIVATE_KEY>` | PrivateKey from `xray x25519` |
 | `<SHORT_ID>` | 8 hex chars (e.g. `a1b2c3d4`) |
+| `<XHTTP_PATH>` | xHTTP profile only (e.g. `/api/v1/a1b2c3d4`) |
+
+**TCP profile:** include `"flow": "xtls-rprx-vision"` on the client. **xHTTP profile:** omit `flow`; set `"network": "xhttp"` and `"mode": "stream-one"`.
 
 ### 3. Obtain Let's Encrypt certificates
 
@@ -190,17 +237,31 @@ sudo certbot renew --dry-run
 After setup, your connection parameters are stored in `secrets/client.env`:
 
 ```env
+TRANSPORT=tcp
 DOMAIN=example.com
 VLESS_UUID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 REALITY_PUBLIC_KEY=...
 SHORT_ID=a1b2c3d4
+# xHTTP transport also includes:
+# XHTTP_PATH=/api/v1/a1b2c3d4
+# XHTTP_MODE=stream-one
 ```
 
-### VLESS URI template
+### VLESS URI templates
+
+**TCP + Vision:**
 
 ```
-vless://<UUID>@<DOMAIN>:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=<DOMAIN>&fp=chrome&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&type=tcp#Self-Stealth-Reality
+vless://<UUID>@<DOMAIN>:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=<DOMAIN>&fp=chrome&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&type=tcp
 ```
+
+**xHTTP + stream-one (no `flow`):**
+
+```
+vless://<UUID>@<DOMAIN>:443?encryption=none&security=reality&sni=<DOMAIN>&fp=chrome&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&type=xhttp&path=%2Fapi%2Fv1%2F<hex>&mode=stream-one
+```
+
+See [`docs/transports.md`](docs/transports.md) for TSPU-oriented tuning notes.
 
 ### Parameter reference
 
@@ -209,13 +270,15 @@ vless://<UUID>@<DOMAIN>:443?encryption=none&flow=xtls-rprx-vision&security=reali
 | Address | `<DOMAIN>` | Your domain |
 | Port | `443` | Host port mapped to Xray |
 | UUID | `<VLESS_UUID>` | Client identity |
-| Flow | `xtls-rprx-vision` | Required for VLESS + Reality |
+| Flow | `xtls-rprx-vision` | TCP only; **omit for xHTTP** |
 | Security | `reality` | Reality protocol |
 | SNI | `<DOMAIN>` | Must match `serverNames` in server config |
 | Fingerprint (`fp`) | `chrome` | TLS client hello mimicry (also try `firefox`, `safari`) |
 | Public key (`pbk`) | `<REALITY_PUBLIC_KEY>` | From `xray x25519` **Password (PublicKey)** field |
 | Short ID (`sid`) | `<SHORT_ID>` | 8 hex characters |
-| Type | `tcp` | Transport |
+| Type | `tcp` or `xhttp` | Transport |
+| Path | `/api/v1/...` | xHTTP only; must match server |
+| Mode | `stream-one` | xHTTP only; recommended with Reality |
 | Encryption | `none` | VLESS default |
 
 ### v2rayN (Windows)
@@ -243,6 +306,8 @@ vless://<UUID>@<DOMAIN>:443?encryption=none&flow=xtls-rprx-vision&security=reali
 
 Right-click the server → **Set as active server**, then enable system proxy.
 
+**xHTTP transport:** use the URI from `--transport xhttp` setup, or set Transport to **XHTTP**, Path and Mode from `secrets/client.env`, and leave **Flow** empty. Requires a recent Xray core (v24.11.30+).
+
 ### Nekoray (Windows / Linux / macOS)
 
 1. **Program → Preferences → Core** — ensure Xray core is selected
@@ -264,6 +329,8 @@ Right-click the server → **Set as active server**, then enable system proxy.
 4. Save and start the profile
 
 **Import URI:** Server → Add profile from clipboard (paste the VLESS URI).
+
+**xHTTP transport:** Transport = XHTTP; Path / Mode from `secrets/client.env`; no Flow. Use Xray core ≥ 24.11.30.
 
 ### sing-box
 
@@ -301,6 +368,32 @@ Minimal client `config.json` (local SOCKS inbound + VLESS Reality outbound):
       }
     }
   ]
+}
+```
+
+**xHTTP outbound** (omit `flow`, add transport block):
+
+```json
+{
+  "type": "vless",
+  "server": "example.com",
+  "server_port": 443,
+  "uuid": "YOUR-UUID-HERE",
+  "tls": {
+    "enabled": true,
+    "server_name": "example.com",
+    "utls": { "enabled": true, "fingerprint": "chrome" },
+    "reality": {
+      "enabled": true,
+      "public_key": "YOUR-PUBLIC-KEY-HERE",
+      "short_id": "a1b2c3d4"
+    }
+  },
+  "transport": {
+    "type": "xhttp",
+    "path": "/api/v1/abc12345",
+    "mode": "stream-one"
+  }
 }
 ```
 
@@ -346,6 +439,7 @@ Under normal operation, external HTTPS probes to `:443` hit Xray first; valid Re
 | certbot fails | Port 80 blocked or DNS wrong | Open port 80; verify A record |
 | Xray exits on start | Invalid `config.json` | Check JSON syntax and placeholder values |
 | Client cannot connect | Wrong `pbk`, `sid`, or `sni` | Match values in `secrets/client.env` |
+| xHTTP fails, TCP works | Wrong `path` / `mode`, or Flow set on client | Remove `flow`; match `XHTTP_PATH` exactly |
 | Nginx TLS errors | Missing certs in `./certs/` | Run `cert_deploy.py` |
 | Renewal succeeds but site breaks | Certs not copied | Ensure deploy hook path is correct and executable |
 
@@ -367,8 +461,15 @@ docker compose logs nginx
 
 ```
 poc-server/
+├── ansible/              # Ubuntu 22.04 Ansible playbook
+├── docs/
+│   └── transports.md     # TCP vs xHTTP, TSPU notes
 ├── docker-compose.yml
-├── xray/config.json
+├── xray/
+│   ├── config.json       # Active config (written by setup.py)
+│   └── profiles/
+│       ├── tcp.json      # TCP + Vision template
+│       └── xhttp.json    # xHTTP + stream-one template
 ├── nginx/nginx.conf
 ├── www/                  # Decoy static site
 ├── certs/                # TLS certs (populated by certbot)

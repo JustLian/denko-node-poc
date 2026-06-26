@@ -16,10 +16,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 XRAY_CONFIG = REPO_ROOT / "xray" / "config.json"
+XRAY_PROFILES = REPO_ROOT / "xray" / "profiles"
 SECRETS_DIR = REPO_ROOT / "secrets"
 SECRETS_FILE = SECRETS_DIR / "client.env"
 CERT_DEPLOY = REPO_ROOT / "scripts" / "cert_deploy.py"
 XRAY_IMAGE = "ghcr.io/xtls/xray-core:latest"
+TRANSPORTS = ("tcp", "xhttp")
+XHTTP_MODES = ("stream-one", "packet-up", "stream-up", "auto")
 
 
 def run(
@@ -77,6 +80,16 @@ def generate_short_id(length: int = 8) -> str:
     return secrets.token_hex(length // 2)
 
 
+def generate_xhttp_path() -> str:
+    return f"/api/v1/{secrets.token_hex(4)}"
+
+
+def validate_xhttp_path(path: str) -> str:
+    if not path.startswith("/") or " " in path:
+        raise SystemExit("xHTTP path must start with '/' and contain no spaces.")
+    return path
+
+
 def get_public_ip() -> str | None:
     for host in ("ifconfig.me", "api.ipify.org", "icanhazip.com"):
         try:
@@ -115,49 +128,102 @@ def validate_dns(domain: str) -> None:
         print(f"DNS OK: {domain} -> {', '.join(sorted(resolved))}")
 
 
-def patch_xray_config(domain: str, uuid: str, private_key: str, short_id: str) -> None:
-    config = json.loads(XRAY_CONFIG.read_text(encoding="utf-8"))
+def load_profile(transport: str) -> dict:
+    profile_path = XRAY_PROFILES / f"{transport}.json"
+    if not profile_path.is_file():
+        raise SystemExit(f"Unknown transport profile: {profile_path}")
+    return json.loads(profile_path.read_text(encoding="utf-8"))
+
+
+def patch_xray_config(
+    transport: str,
+    domain: str,
+    uuid: str,
+    private_key: str,
+    short_id: str,
+    *,
+    xhttp_path: str = "",
+    xhttp_mode: str = "stream-one",
+) -> None:
+    config = load_profile(transport)
     inbound = config["inbounds"][0]
     inbound["settings"]["clients"][0]["id"] = uuid
+    if transport == "tcp":
+        inbound["settings"]["clients"][0]["flow"] = "xtls-rprx-vision"
+    elif "flow" in inbound["settings"]["clients"][0]:
+        del inbound["settings"]["clients"][0]["flow"]
+
+    if transport == "xhttp":
+        inbound["streamSettings"]["xhttpSettings"]["path"] = xhttp_path
+        inbound["streamSettings"]["xhttpSettings"]["mode"] = xhttp_mode
+
     reality = inbound["streamSettings"]["realitySettings"]
     reality["serverNames"] = [domain]
     reality["privateKey"] = private_key
     reality["shortIds"] = [short_id]
     XRAY_CONFIG.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-    print(f"Patched {XRAY_CONFIG}")
+    print(f"Wrote {XRAY_CONFIG} (transport={transport})")
 
 
-def write_secrets(domain: str, uuid: str, public_key: str, short_id: str) -> None:
+def write_secrets(
+    transport: str,
+    domain: str,
+    uuid: str,
+    public_key: str,
+    short_id: str,
+    *,
+    xhttp_path: str = "",
+    xhttp_mode: str = "stream-one",
+) -> None:
     SECRETS_DIR.mkdir(parents=True, exist_ok=True)
-    SECRETS_FILE.write_text(
-        "\n".join(
+    lines = [
+        f"TRANSPORT={transport}",
+        f"DOMAIN={domain}",
+        f"VLESS_UUID={uuid}",
+        f"REALITY_PUBLIC_KEY={public_key}",
+        f"SHORT_ID={short_id}",
+    ]
+    if transport == "xhttp":
+        lines.extend(
             [
-                f"DOMAIN={domain}",
-                f"VLESS_UUID={uuid}",
-                f"REALITY_PUBLIC_KEY={public_key}",
-                f"SHORT_ID={short_id}",
-                "",
+                f"XHTTP_PATH={xhttp_path}",
+                f"XHTTP_MODE={xhttp_mode}",
             ]
-        ),
-        encoding="utf-8",
-    )
+        )
+    SECRETS_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
     os.chmod(SECRETS_FILE, 0o600)
     print(f"Wrote {SECRETS_FILE}")
 
 
-def build_vless_uri(domain: str, uuid: str, public_key: str, short_id: str) -> str:
-    params = {
+def build_vless_uri(
+    transport: str,
+    domain: str,
+    uuid: str,
+    public_key: str,
+    short_id: str,
+    *,
+    xhttp_path: str = "",
+    xhttp_mode: str = "stream-one",
+) -> str:
+    params: dict[str, str] = {
         "encryption": "none",
-        "flow": "xtls-rprx-vision",
         "security": "reality",
         "sni": domain,
         "fp": "chrome",
         "pbk": public_key,
         "sid": short_id,
-        "type": "tcp",
     }
+    if transport == "tcp":
+        params["flow"] = "xtls-rprx-vision"
+        params["type"] = "tcp"
+        label = "Self-Stealth-TCP"
+    else:
+        params["type"] = "xhttp"
+        params["path"] = xhttp_path
+        params["mode"] = xhttp_mode
+        label = "Self-Stealth-xHTTP"
     query = urllib.parse.urlencode(params)
-    return f"vless://{uuid}@{domain}:443?{query}#Self-Stealth-Reality"
+    return f"vless://{uuid}@{domain}:443?{query}#{label}"
 
 
 def issue_certificate(domain: str, email: str, skip_cert: bool) -> None:
@@ -249,6 +315,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--domain", help="Your domain (A record must point to this VPS)")
     parser.add_argument("--email", help="Email for Let's Encrypt registration")
     parser.add_argument("--short-id", help="Reality short ID (8 hex chars); generated if omitted")
+    parser.add_argument(
+        "--transport",
+        choices=TRANSPORTS,
+        default="tcp",
+        help="Transport profile: tcp (Vision) or xhttp (TSPU-oriented, no Vision)",
+    )
+    parser.add_argument(
+        "--xhttp-path",
+        help="xHTTP path (xhttp transport only); random /api/v1/<hex> if omitted",
+    )
+    parser.add_argument(
+        "--xhttp-mode",
+        choices=XHTTP_MODES,
+        default="stream-one",
+        help="xHTTP mode; stream-one recommended for direct Reality (default)",
+    )
     parser.add_argument("--skip-cert", action="store_true", help="Skip certbot certificate issuance")
     parser.add_argument("--skip-compose", action="store_true", help="Skip docker compose up -d")
     parser.add_argument("--install-cron", action="store_true", help="Install /etc/cron.d/certbot-proxy-renew")
@@ -295,8 +377,32 @@ def main() -> None:
     short_id = short_id.lower()
     print(f"Short ID: {short_id}")
 
-    patch_xray_config(domain, uuid, private_key, short_id)
-    write_secrets(domain, uuid, public_key, short_id)
+    transport = args.transport
+    xhttp_path = ""
+    xhttp_mode = args.xhttp_mode
+    if transport == "xhttp":
+        xhttp_path = validate_xhttp_path(args.xhttp_path or generate_xhttp_path())
+        print(f"xHTTP path: {xhttp_path}")
+        print(f"xHTTP mode: {xhttp_mode}")
+
+    patch_xray_config(
+        transport,
+        domain,
+        uuid,
+        private_key,
+        short_id,
+        xhttp_path=xhttp_path,
+        xhttp_mode=xhttp_mode,
+    )
+    write_secrets(
+        transport,
+        domain,
+        uuid,
+        public_key,
+        short_id,
+        xhttp_path=xhttp_path,
+        xhttp_mode=xhttp_mode,
+    )
 
     issue_certificate(domain, email, args.skip_cert)
 
@@ -309,11 +415,19 @@ def main() -> None:
     if args.install_renewal_hook:
         install_renewal_hook(domain)
 
-    uri = build_vless_uri(domain, uuid, public_key, short_id)
+    uri = build_vless_uri(
+        transport,
+        domain,
+        uuid,
+        public_key,
+        short_id,
+        xhttp_path=xhttp_path,
+        xhttp_mode=xhttp_mode,
+    )
     print("\n" + "=" * 60)
-    print("Setup complete. Import this VLESS URI into your client:\n")
+    print(f"Setup complete (transport={transport}). Import this VLESS URI:\n")
     print(uri)
-    print("\nSee README.md for v2rayN, Nekoray, and sing-box configuration.")
+    print("\nSee README.md and docs/transports.md for client configuration.")
     print("=" * 60)
 
 

@@ -1,0 +1,178 @@
+---
+- name: Deploy VLESS+Reality Self-Stealth proxy on Ubuntu 22.04
+  hosts: proxy
+  become: true
+
+  vars:
+    proxy_install_dir: /opt/denko-node-poc
+    proxy_git_repo: ""
+    proxy_git_version: main
+    proxy_force_reconfigure: false
+    proxy_install_cron: true
+    proxy_install_renewal_hook: true
+    proxy_ufw_enable: true
+
+  pre_tasks:
+    - name: Require domain and email
+      ansible.builtin.assert:
+        that:
+          - proxy_domain | default('') | length > 0
+          - letsencrypt_email | default('') | length > 0
+        fail_msg: >-
+          Set proxy_domain and letsencrypt_email in group_vars/all.yml
+          or pass them with -e proxy_domain=... -e letsencrypt_email=...
+
+    - name: Check OS is Ubuntu 22.04+
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == "Ubuntu"
+          - ansible_facts['distribution_version'] is version('22.04', '>=')
+        fail_msg: This playbook is written for Ubuntu 22.04 (Jammy) or newer.
+
+  tasks:
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - python3
+          - certbot
+          - rsync
+          - ufw
+        state: present
+        update_cache: true
+
+    - name: Create Docker apt keyring directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Add Docker apt repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else 'arm64' }}
+          signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/ubuntu {{ ansible_facts['distribution_release'] }} stable
+        filename: docker
+        state: present
+
+    - name: Install Docker Engine and Compose plugin
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Enable and start Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Configure UFW firewall
+      when: proxy_ufw_enable
+      block:
+        - name: Allow OpenSSH through UFW
+          ansible.builtin.command:
+            cmd: ufw allow OpenSSH
+          changed_when: false
+
+        - name: Allow HTTP through UFW (certbot)
+          ansible.builtin.command:
+            cmd: ufw allow 80/tcp
+          changed_when: false
+
+        - name: Allow HTTPS through UFW
+          ansible.builtin.command:
+            cmd: ufw allow 443/tcp
+          changed_when: false
+
+        - name: Enable UFW
+          ansible.builtin.command:
+            cmd: ufw --force enable
+          changed_when: false
+
+    - name: Ensure install directory exists
+      ansible.builtin.file:
+        path: "{{ proxy_install_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Clone or update repository on VPS
+      ansible.builtin.git:
+        repo: "{{ proxy_git_repo }}"
+        dest: "{{ proxy_install_dir }}"
+        version: "{{ proxy_git_version }}"
+        force: false
+      when: proxy_git_repo | length > 0
+
+    - name: Sync project files from control machine
+      ansible.posix.synchronize:
+        src: "{{ playbook_dir }}/../"
+        dest: "{{ proxy_install_dir }}/"
+        delete: false
+        rsync_opts:
+          - "--exclude=.git/"
+          - "--exclude=ansible/"
+          - "--exclude=certs/*.pem"
+          - "--exclude=secrets/"
+          - "--exclude=*.log"
+      delegate_to: localhost
+      become: false
+      when: proxy_git_repo | length == 0
+
+    - name: Check whether proxy is already configured
+      ansible.builtin.stat:
+        path: "{{ proxy_install_dir }}/secrets/client.env"
+      register: proxy_secrets
+
+    - name: Run bootstrap script
+      ansible.builtin.command:
+        argv: "{{ _setup_argv }}"
+        chdir: "{{ proxy_install_dir }}"
+      vars:
+        _setup_argv: >-
+          {{
+            ['python3', 'scripts/setup.py', '--domain', proxy_domain, '--email', letsencrypt_email, '--transport', proxy_transport]
+            + (['--xhttp-path', proxy_xhttp_path] if proxy_transport == 'xhttp' and (proxy_xhttp_path | default('')) | length > 0 else [])
+            + (['--xhttp-mode', proxy_xhttp_mode] if proxy_transport == 'xhttp' else [])
+            + (['--install-cron'] if proxy_install_cron else [])
+            + (['--install-renewal-hook'] if proxy_install_renewal_hook else [])
+          }}
+      register: proxy_setup
+      changed_when: true
+      when: not proxy_secrets.stat.exists or proxy_force_reconfigure
+
+    - name: Print bootstrap output
+      ansible.builtin.debug:
+        msg: "{{ proxy_setup.stdout_lines }}"
+      when: proxy_setup is changed
+
+    - name: Ensure stack is running (already configured)
+      ansible.builtin.command:
+        cmd: docker compose up -d
+        chdir: "{{ proxy_install_dir }}"
+      register: compose_up
+      changed_when: >-
+        compose_up.stdout is search('Started')
+        or compose_up.stdout is search('Created')
+        or compose_up.stdout is search('Recreated')
+      when: proxy_secrets.stat.exists and not (proxy_force_reconfigure | bool)
+
+    - name: Show client secrets path
+      ansible.builtin.debug:
+        msg: >-
+          Client parameters saved to {{ proxy_install_dir }}/secrets/client.env.
+          If this is a fresh install, the VLESS URI was printed above by setup.py.
+      when: proxy_setup is changed or proxy_secrets.stat.exists

@@ -1,0 +1,26 @@
+---
+# Copy this file to group_vars/all.yml and edit the values below.
+
+proxy_domain: pocjp.denko.app
+letsencrypt_email: me@rian.moe
+
+# Where the stack is installed on the VPS
+proxy_install_dir: /opt/denko-node-poc
+
+# Deploy source: set proxy_git_repo OR leave empty to rsync from your laptop
+proxy_git_repo: ""          # e.g. git@github.com:you/denko-node-poc.git
+proxy_git_version: main
+
+# Re-run setup.py even if secrets/client.env already exists (regenerates keys!)
+proxy_force_reconfigure: false
+
+proxy_install_cron: true
+proxy_install_renewal_hook: true
+
+# UFW firewall (allows SSH, 80, 443)
+proxy_ufw_enable: true
+
+# Transport: tcp (Vision, default) or xhttp (TSPU-oriented alternative)
+proxy_transport: tcp
+# proxy_xhttp_path: /api/v1/custom   # optional; random if omitted
+proxy_xhttp_mode: stream-one
