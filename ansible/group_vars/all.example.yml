@@ -20,7 +20,25 @@ proxy_install_renewal_hook: true
 # UFW firewall (allows SSH, 80, 443)
 proxy_ufw_enable: true
 
+# Role: egress (default single-node) or bridge (RU split-routing hop)
+proxy_role: egress
+
 # Transport: tcp (Vision, default) or xhttp (TSPU-oriented alternative)
+# Bridge role requires xhttp
 proxy_transport: tcp
 # proxy_xhttp_path: /api/v1/custom   # optional; random if omitted
 proxy_xhttp_mode: stream-one
+
+# Bridge only: path to egress-peer.env on the Ansible control machine
+# (copied to the VPS before setup). Alternatively set individual proxy_egress_* vars.
+# proxy_egress_peer_file: /path/to/egress-peer.env
+# proxy_egress_domain: egress.example.com
+# proxy_egress_uuid: ...
+# proxy_egress_public_key: ...
+# proxy_egress_short_id: ...
+# proxy_egress_xhttp_path: /api/v1/...
+# proxy_egress_port: 443
+# proxy_egress_chain_mode: packet-up
+
+# Reuse existing secrets/client.env keys when re-running setup
+# proxy_keep_secrets: false

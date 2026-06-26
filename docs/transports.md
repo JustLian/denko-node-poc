@@ -55,7 +55,7 @@ Avoid foreign SNI spoofing on the same IP as your domain — that is what Self-S
 
 ### If you are inside Russia
 
-A single foreign VPS may still see throttling. Operators often add a **domestic bridge** (RU VPS → this egress) with **xHTTP `packet-up`** on the bridge leg. This repo is the **egress** node; see [petrochen/xray-double-hop](https://github.com/petrochen/xray-double-hop) for chain topology.
+A single foreign VPS may still see throttling. Operators often add a **domestic bridge** (RU VPS → this egress) with **xHTTP `packet-up`** on the bridge leg. See [multi-hop.md](multi-hop.md) for bridge + egress setup in this repo.
 
 ## xHTTP profile defaults in this repo
 

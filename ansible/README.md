@@ -77,9 +77,19 @@ proxy_force_reconfigure: true
 | `proxy_install_cron` | `true` | Install cert renewal cron |
 | `proxy_install_renewal_hook` | `true` | Install certbot deploy hook |
 | `proxy_ufw_enable` | `true` | Open ports 22/80/443 via UFW |
-| `proxy_transport` | `tcp` | `tcp` or `xhttp` (see docs/transports.md) |
+| `proxy_role` | `egress` | `egress` (single node) or `bridge` (RU hop) |
+| `proxy_transport` | `tcp` | `tcp` or `xhttp` (bridge requires `xhttp`) |
 | `proxy_xhttp_path` | *(random)* | xHTTP path when transport is xhttp |
-| `proxy_xhttp_mode` | `stream-one` | xHTTP mode (`stream-one` recommended for Reality) |
+| `proxy_xhttp_mode` | `stream-one` | xHTTP mode for client inbound |
+| `proxy_egress_peer_file` | `""` | Local path to `egress-peer.env` (bridge role) |
+| `proxy_egress_domain` | `""` | Egress domain if not using peer file |
+| `proxy_egress_uuid` | `""` | Egress UUID if not using peer file |
+| `proxy_egress_public_key` | `""` | Egress Reality public key |
+| `proxy_egress_short_id` | `""` | Egress Reality short ID |
+| `proxy_egress_xhttp_path` | `""` | Egress xHTTP path |
+| `proxy_egress_port` | `443` | Egress port |
+| `proxy_egress_chain_mode` | `packet-up` | Bridge→egress xHTTP mode |
+| `proxy_keep_secrets` | `false` | Pass `--keep-secrets` to setup.py |
 | `proxy_force_reconfigure` | `false` | Re-run setup.py even if configured |
 
 ## What Ansible does not automate

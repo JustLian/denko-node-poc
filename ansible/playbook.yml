@@ -22,6 +22,25 @@
           Set proxy_domain and letsencrypt_email in group_vars/all.yml
           or pass them with -e proxy_domain=... -e letsencrypt_email=...
 
+    - name: Validate bridge role prerequisites
+      ansible.builtin.assert:
+        that:
+          - proxy_transport | default('tcp') == 'xhttp'
+          - >-
+            (proxy_egress_peer_file | default('')) | length > 0
+            or (
+              (proxy_egress_domain | default('')) | length > 0
+              and (proxy_egress_uuid | default('')) | length > 0
+              and (proxy_egress_public_key | default('')) | length > 0
+              and (proxy_egress_short_id | default('')) | length > 0
+              and (proxy_egress_xhttp_path | default('')) | length > 0
+            )
+        fail_msg: >-
+          Bridge role requires proxy_transport=xhttp and either proxy_egress_peer_file
+          or all of proxy_egress_domain, proxy_egress_uuid, proxy_egress_public_key,
+          proxy_egress_short_id, proxy_egress_xhttp_path.
+      when: proxy_role | default('egress') == 'bridge'
+
     - name: Check OS is Ubuntu 22.04+
       ansible.builtin.assert:
         that:
@@ -137,6 +156,15 @@
         path: "{{ proxy_install_dir }}/secrets/client.env"
       register: proxy_secrets
 
+    - name: Copy egress peer file for bridge role
+      ansible.builtin.copy:
+        src: "{{ proxy_egress_peer_file }}"
+        dest: "{{ proxy_install_dir }}/secrets/egress-peer.env"
+        mode: "0600"
+      when:
+        - proxy_role | default('egress') == 'bridge'
+        - proxy_egress_peer_file | default('') | length > 0
+
     - name: Run bootstrap script
       ansible.builtin.command:
         argv: "{{ _setup_argv }}"
@@ -144,9 +172,18 @@
       vars:
         _setup_argv: >-
           {{
-            ['python3', 'scripts/setup.py', '--domain', proxy_domain, '--email', letsencrypt_email, '--transport', proxy_transport]
+            ['python3', 'scripts/setup.py', '--domain', proxy_domain, '--email', letsencrypt_email, '--role', proxy_role | default('egress'), '--transport', proxy_transport]
             + (['--xhttp-path', proxy_xhttp_path] if proxy_transport == 'xhttp' and (proxy_xhttp_path | default('')) | length > 0 else [])
             + (['--xhttp-mode', proxy_xhttp_mode] if proxy_transport == 'xhttp' else [])
+            + (['--keep-secrets'] if proxy_keep_secrets | default(false) else [])
+            + (['--egress-peer-file', proxy_install_dir + '/secrets/egress-peer.env'] if proxy_role | default('egress') == 'bridge' and (proxy_egress_peer_file | default('')) | length > 0 else [])
+            + (['--egress-domain', proxy_egress_domain] if proxy_role | default('egress') == 'bridge' and (proxy_egress_domain | default('')) | length > 0 else [])
+            + (['--egress-uuid', proxy_egress_uuid] if proxy_role | default('egress') == 'bridge' and (proxy_egress_uuid | default('')) | length > 0 else [])
+            + (['--egress-public-key', proxy_egress_public_key] if proxy_role | default('egress') == 'bridge' and (proxy_egress_public_key | default('')) | length > 0 else [])
+            + (['--egress-short-id', proxy_egress_short_id] if proxy_role | default('egress') == 'bridge' and (proxy_egress_short_id | default('')) | length > 0 else [])
+            + (['--egress-xhttp-path', proxy_egress_xhttp_path] if proxy_role | default('egress') == 'bridge' and (proxy_egress_xhttp_path | default('')) | length > 0 else [])
+            + (['--egress-port', proxy_egress_port | string] if proxy_role | default('egress') == 'bridge' and (proxy_egress_port | default(443)) != 443 else [])
+            + (['--egress-chain-mode', proxy_egress_chain_mode] if proxy_role | default('egress') == 'bridge' and (proxy_egress_chain_mode | default('packet-up')) != 'packet-up' else [])
             + (['--install-cron'] if proxy_install_cron else [])
             + (['--install-renewal-hook'] if proxy_install_renewal_hook else [])
           }}

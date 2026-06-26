@@ -113,6 +113,44 @@ Full rationale, TSPU notes, and client examples: [`docs/transports.md`](docs/tra
 
 Ansible: set `proxy_transport: xhttp` in `group_vars/all.yml`.
 
+### Bridge + egress (multi-hop)
+
+For users inside Russia, deploy two nodes: a **bridge** (accepts clients, split-routes RU traffic direct) and an **egress** abroad (final exit). See [`docs/multi-hop.md`](docs/multi-hop.md) for architecture and TSPU notes.
+
+**1. Egress (abroad)** — produces `secrets/egress-peer.env` for the bridge:
+
+```bash
+sudo python3 scripts/setup.py \
+  --role egress \
+  --transport xhttp \
+  --domain egress.example.com \
+  --email you@example.com \
+  --install-cron \
+  --install-renewal-hook
+```
+
+**2. Bridge (RU / near-RU)** — clients import the URI printed here (bridge domain):
+
+```bash
+sudo python3 scripts/setup.py \
+  --role bridge \
+  --transport xhttp \
+  --domain bridge.example.ru \
+  --email you@example.ru \
+  --egress-peer-file ./secrets/egress-peer.env \
+  --install-cron \
+  --install-renewal-hook
+```
+
+| Role | `--role` | Transport | Profile |
+|------|----------|-----------|---------|
+| Single-node exit (default) | `egress` | `tcp` or `xhttp` | `egress-tcp.json` / `egress-xhttp.json` |
+| RU bridge hop | `bridge` | `xhttp` only | `bridge-xhttp.json` |
+
+Re-run without regenerating keys: add `--keep-secrets` to either command.
+
+Ansible: set `proxy_role: egress|bridge` and `proxy_egress_peer_file` for bridge hosts. See [`ansible/README.md`](ansible/README.md).
+
 ## Manual setup
 
 ### 1. Generate secrets
@@ -144,7 +182,7 @@ python3 -c "import secrets; print(secrets.token_hex(4))"
 Copy a profile and edit placeholders, or let `setup.py` do this automatically:
 
 ```bash
-cp xray/profiles/tcp.json xray/config.json    # or profiles/xhttp.json
+cp xray/profiles/egress-tcp.json xray/config.json    # or egress-xhttp.json / bridge-xhttp.json
 ```
 
 | Placeholder | Value |
@@ -463,20 +501,24 @@ docker compose logs nginx
 poc-server/
 ├── ansible/              # Ubuntu 22.04 Ansible playbook
 ├── docs/
-│   └── transports.md     # TCP vs xHTTP, TSPU notes
+│   ├── transports.md     # TCP vs xHTTP, TSPU notes
+│   └── multi-hop.md      # Bridge + egress topology
 ├── docker-compose.yml
 ├── xray/
 │   ├── config.json       # Active config (written by setup.py)
 │   └── profiles/
-│       ├── tcp.json      # TCP + Vision template
-│       └── xhttp.json    # xHTTP + stream-one template
+│       ├── egress-tcp.json
+│       ├── egress-xhttp.json
+│       └── bridge-xhttp.json
 ├── nginx/nginx.conf
 ├── www/                  # Decoy static site
 ├── certs/                # TLS certs (populated by certbot)
 ├── scripts/
 │   ├── setup.py          # Automated bootstrap
 │   └── cert_deploy.py    # Post-renewal cert copy + nginx reload
-└── secrets/client.env    # Generated client parameters (gitignored)
+└── secrets/
+    ├── client.env        # Generated client parameters (gitignored)
+    └── egress-peer.env   # Egress peer info for bridge (gitignored)
 ```
 
 ## License
