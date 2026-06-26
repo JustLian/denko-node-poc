@@ -60,11 +60,13 @@ def generate_x25519() -> tuple[str, str]:
     private_key = ""
     public_key = ""
     for line in output.splitlines():
-        if "PrivateKey:" in line:
+        line = line.strip()
+        if line.startswith("PrivateKey:"):
             private_key = line.split(":", 1)[1].strip()
-        elif "Password:" in line:
+        elif line.startswith("Password"):
+            # "Password:" (legacy) or "Password (PublicKey):" (current xray-core)
             public_key = line.split(":", 1)[1].strip()
-        elif "Public key:" in line:
+        elif line.startswith("Public key:") or line.startswith("PublicKey:"):
             public_key = line.split(":", 1)[1].strip()
     if not private_key or not public_key:
         raise SystemExit(f"Could not parse x25519 output:\n{output}")

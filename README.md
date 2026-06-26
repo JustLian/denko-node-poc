@@ -90,7 +90,8 @@ docker run --rm ghcr.io/xtls/xray-core:latest x25519
 The `x25519` command outputs:
 
 - **PrivateKey** → paste into `xray/config.json` as `privateKey` (server-side only)
-- **Password** (also labeled Public key in some versions) → client `pbk` parameter
+- **Password (PublicKey)** → client `pbk` parameter (older xray versions label this field `Password:`)
+- **Hash32** → informational only; not used in client configuration
 
 Generate an 8-character hex short ID (example):
 
@@ -212,7 +213,7 @@ vless://<UUID>@<DOMAIN>:443?encryption=none&flow=xtls-rprx-vision&security=reali
 | Security | `reality` | Reality protocol |
 | SNI | `<DOMAIN>` | Must match `serverNames` in server config |
 | Fingerprint (`fp`) | `chrome` | TLS client hello mimicry (also try `firefox`, `safari`) |
-| Public key (`pbk`) | `<REALITY_PUBLIC_KEY>` | From `xray x25519` Password/Public key field |
+| Public key (`pbk`) | `<REALITY_PUBLIC_KEY>` | From `xray x25519` **Password (PublicKey)** field |
 | Short ID (`sid`) | `<SHORT_ID>` | 8 hex characters |
 | Type | `tcp` | Transport |
 | Encryption | `none` | VLESS default |
