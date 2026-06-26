@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Denko Archive — internal documentation gateway">
+  <title>Denko Archive · Gateway Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="grain"></div>
+
+  <header class="site-header">
+    <div class="brand">
+      <span class="brand-mark">◇</span>
+      <span class="brand-name">Denko Archive</span>
+    </div>
+    <nav class="site-nav">
+      <span class="nav-item">Docs</span>
+      <span class="nav-item">Collections</span>
+      <span class="nav-item nav-muted">Status</span>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="hero-label">Gateway Console</p>
+      <h1>Internal documentation<br>and API reference</h1>
+      <p class="hero-sub">
+        Restricted access portal for archived technical specifications,
+        schema definitions, and service endpoints.
+      </p>
+      <div class="hero-meta">
+        <span class="meta-chip"><code>v2.4.1</code></span>
+        <span class="meta-chip meta-muted">Last sync · 2026-06-26</span>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <p class="card-label">GET</p>
+        <h2>/v1/collections</h2>
+        <p>List indexed document collections. Requires bearer token with read scope.</p>
+        <span class="card-tag">archive</span>
+      </article>
+
+      <article class="card">
+        <p class="card-label">POST</p>
+        <h2>/v1/query</h2>
+        <p>Full-text search across archived specifications and changelogs.</p>
+        <span class="card-tag">search</span>
+      </article>
+
+      <article class="card">
+        <p class="card-label">GET</p>
+        <h2>/v1/schemas</h2>
+        <p>OpenAPI schema registry for internal microservices and data models.</p>
+        <span class="card-tag">schema</span>
+      </article>
+
+      <article class="card">
+        <p class="card-label">GET</p>
+        <h2>/health</h2>
+        <p>Service health and dependency status. Returns 200 when all subsystems nominal.</p>
+        <span class="card-tag">ops</span>
+      </article>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; 2026 Denko Archive. Restricted access — authorized personnel only.</p>
+  </footer>
+</body>
+</html>

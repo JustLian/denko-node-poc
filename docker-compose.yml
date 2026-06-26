@@ -1,0 +1,29 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: proxy-nginx
+    restart: unless-stopped
+    networks:
+      - proxy_net
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./www:/usr/share/nginx/html:ro
+      - ./certs:/etc/nginx/certs:ro
+
+  xray:
+    image: ghcr.io/xtls/xray-core:latest
+    container_name: proxy-xray
+    restart: unless-stopped
+    command: run -c /etc/xray/config.json
+    depends_on:
+      - nginx
+    ports:
+      - "443:443"
+    networks:
+      - proxy_net
+    volumes:
+      - ./xray/config.json:/etc/xray/config.json:ro
+
+networks:
+  proxy_net:
+    driver: bridge
