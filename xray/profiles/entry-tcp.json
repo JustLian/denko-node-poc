@@ -1,0 +1,122 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "tag": "phone-in",
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "<VLESS_UUID>",
+            "flow": "xtls-rprx-vision"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "nginx:8443",
+          "xver": 0,
+          "serverNames": [
+            "<YOUR_DOMAIN>"
+          ],
+          "privateKey": "<REALITY_PRIVATE_KEY>",
+          "shortIds": [
+            "<SHORT_ID>"
+          ]
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    },
+    {
+      "tag": "egress",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "<EGRESS_DOMAIN>",
+            "port": "<EGRESS_PORT>",
+            "users": [
+              {
+                "id": "<EGRESS_UUID>",
+                "encryption": "none",
+                "flow": "xtls-rprx-vision"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "xhttpSettings": {
+          "path": "<EGRESS_XHTTP_PATH>",
+          "mode": "<EGRESS_CHAIN_MODE>"
+        },
+        "security": "reality",
+        "realitySettings": {
+          "fingerprint": "chrome",
+          "serverName": "<EGRESS_DOMAIN>",
+          "publicKey": "<EGRESS_PUBLIC_KEY>",
+          "shortId": "<EGRESS_SHORT_ID>"
+        }
+      }
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "block"
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "type": "field",
+        "ip": [
+          "geoip:private"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "geosite:category-ru"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "ip": [
+          "geoip:ru"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "inboundTag": [
+          "phone-in"
+        ],
+        "network": "tcp,udp",
+        "outboundTag": "egress"
+      }
+    ]
+  }
+}

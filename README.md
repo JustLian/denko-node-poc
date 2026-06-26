@@ -142,14 +142,60 @@ sudo python3 scripts/setup.py \
   --install-renewal-hook
 ```
 
-| Role | `--role` | Transport | Profile |
-|------|----------|-----------|---------|
-| Single-node exit (default) | `egress` | `tcp` or `xhttp` | `egress-tcp.json` / `egress-xhttp.json` |
-| RU bridge hop | `bridge` | `xhttp` only | `bridge-xhttp.json` |
-
 Re-run without regenerating keys: add `--keep-secrets` to either command.
 
 Ansible: set `proxy_role: egress|bridge` and `proxy_egress_peer_file` for bridge hosts. See [`ansible/README.md`](ansible/README.md).
+
+### Residential entry (home PC + port forward)
+
+Run an **entry** node on a home PC behind a router (TCP 443 forwarded to LAN IP). Uses the same split routing as bridge but with inbound tag `phone-in` for mobile clients on LTE. **Native** install runs Xray + Nginx via systemd (no Docker).
+
+See the full guide: [`docs/residential-entry.md`](docs/residential-entry.md).
+
+```bash
+sudo python3 scripts/setup.py \
+  --role entry \
+  --transport xhttp \
+  --native \
+  --egress-peer-file ./secrets/egress-peer.env \
+  --domain entry.denko.app \
+  --email you@example.com \
+  --skip-compose \
+  --install-renewal-hook
+
+sudo bash scripts/install-native.sh
+sudo systemctl enable --now denko-nginx denko-xray
+```
+
+| Role | `--role` | Transport | Profile | Deploy |
+|------|----------|-----------|---------|--------|
+| Single-node exit (default) | `egress` | `tcp`, `xhttp`, or `grpc` | `egress-*.json` | Docker |
+| RU bridge hop | `bridge` | `tcp`, `xhttp`, or `grpc` | `bridge-*.json` | Docker |
+| Home entry (port forward) | `entry` | `tcp`, `xhttp`, or `grpc` | `entry-*.json` | `--native` systemd |
+
+**Provider-style mobile profile** (gRPC + tesla.com + qq, port 6437):
+
+```bash
+sudo python3 scripts/setup.py --provider --role egress --domain egress.example.com --email you@example.com
+```
+
+See [docs/grpc-provider.md](docs/grpc-provider.md).
+
+**Protocol stack** (`--stack`):
+
+| Stack | Description |
+|-------|-------------|
+| `xray` (default) | VLESS + Reality + Nginx decoy |
+| `hysteria` | Hysteria2 QUIC/UDP only — good for mobile DPI; no Xray chain |
+| `hybrid` | TCP/443 → Xray, UDP/443 → Hysteria2 (egress Docker only) |
+
+See [docs/hysteria.md](docs/hysteria.md). Bridge/entry chain to Xray egress requires `--stack xray`. Entry TCP example:
+
+```bash
+sudo python3 scripts/setup.py --role entry --transport tcp --native \
+  --egress-peer-file ./secrets/egress-peer.env \
+  --domain yers.example.com --email you@example.com --skip-compose
+```
 
 ## Manual setup
 
@@ -182,7 +228,7 @@ python3 -c "import secrets; print(secrets.token_hex(4))"
 Copy a profile and edit placeholders, or let `setup.py` do this automatically:
 
 ```bash
-cp xray/profiles/egress-tcp.json xray/config.json    # or egress-xhttp.json / bridge-xhttp.json
+cp xray/profiles/egress-tcp.json xray/config.json    # or egress-xhttp / bridge-* / entry-*
 ```
 
 | Placeholder | Value |
@@ -262,7 +308,13 @@ Installed by `setup.py --install-cron` as `/etc/cron.d/certbot-proxy-renew`:
 
 1. Reads the domain from `PROXY_DOMAIN` or `secrets/client.env`
 2. Copies `fullchain.pem` and `privkey.pem` from `/etc/letsencrypt/live/$DOMAIN/` to `./certs/`
-3. Reloads the Nginx container (`nginx -s reload`, with restart fallback)
+3. Reloads Nginx — Docker container by default; native host nginx when `PROXY_NATIVE=1`, `NATIVE=1` in secrets, or `--native` flag
+
+For residential entry (native):
+
+```bash
+sudo PROXY_DOMAIN=entry.denko.app python3 scripts/cert_deploy.py --native
+```
 
 Test renewal (dry run):
 
@@ -502,20 +554,29 @@ poc-server/
 ├── ansible/              # Ubuntu 22.04 Ansible playbook
 ├── docs/
 │   ├── transports.md     # TCP vs xHTTP, TSPU notes
-│   └── multi-hop.md      # Bridge + egress topology
+│   ├── multi-hop.md      # Bridge + egress topology
+│   └── residential-entry.md  # Home PC port forward + native systemd
 ├── docker-compose.yml
 ├── xray/
 │   ├── config.json       # Active config (written by setup.py)
 │   └── profiles/
 │       ├── egress-tcp.json
 │       ├── egress-xhttp.json
-│       └── bridge-xhttp.json
+│       ├── bridge-tcp.json
+│       ├── bridge-xhttp.json
+│       ├── entry-tcp.json
+│       ├── entry-xhttp.json
+│       ├── egress-grpc.json
+│       ├── bridge-grpc.json
+│       └── entry-grpc.json
 ├── nginx/nginx.conf
 ├── www/                  # Decoy static site
 ├── certs/                # TLS certs (populated by certbot)
 ├── scripts/
 │   ├── setup.py          # Automated bootstrap
-│   └── cert_deploy.py    # Post-renewal cert copy + nginx reload
+│   ├── cert_deploy.py    # Post-renewal cert copy + nginx reload
+│   ├── install-native.sh # Install systemd units for --native entry
+│   └── systemd/          # denko-xray / denko-nginx unit templates
 └── secrets/
     ├── client.env        # Generated client parameters (gitignored)
     └── egress-peer.env   # Egress peer info for bridge (gitignored)

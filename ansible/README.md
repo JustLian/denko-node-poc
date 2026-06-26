@@ -78,7 +78,7 @@ proxy_force_reconfigure: true
 | `proxy_install_renewal_hook` | `true` | Install certbot deploy hook |
 | `proxy_ufw_enable` | `true` | Open ports 22/80/443 via UFW |
 | `proxy_role` | `egress` | `egress` (single node) or `bridge` (RU hop) |
-| `proxy_transport` | `tcp` | `tcp` or `xhttp` (bridge requires `xhttp`) |
+| `proxy_transport` | `tcp` | `tcp` or `xhttp` for any role |
 | `proxy_xhttp_path` | *(random)* | xHTTP path when transport is xhttp |
 | `proxy_xhttp_mode` | `stream-one` | xHTTP mode for client inbound |
 | `proxy_egress_peer_file` | `""` | Local path to `egress-peer.env` (bridge role) |

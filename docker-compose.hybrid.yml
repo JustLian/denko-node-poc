@@ -1,0 +1,28 @@
+# Hybrid: Nginx on host 443 (TCP+UDP stream) → Xray TCP + Hysteria QUIC
+# Use with: docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up -d
+# Run setup.py with --stack hybrid first (patches Xray to 8444, Hysteria to 8445)
+
+services:
+  nginx:
+    ports:
+      - "443:443/tcp"
+      - "443:443/udp"
+    volumes:
+      - ./nginx/nginx-hybrid.conf:/etc/nginx/nginx.conf:ro
+      - ./www:/usr/share/nginx/html:ro
+      - ./certs:/etc/nginx/certs:ro
+
+  xray:
+    ports: []
+
+  hysteria:
+    image: tobyxdd/hysteria:latest
+    container_name: proxy-hysteria
+    restart: unless-stopped
+    command: server -c /etc/hysteria/config.yaml
+    networks:
+      - proxy_net
+    volumes:
+      - ./hysteria/config.yaml:/etc/hysteria/config.yaml:ro
+      - ./certs:/etc/hysteria/certs:ro
+      - ./www:/etc/hysteria/www:ro

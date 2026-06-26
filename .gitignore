@@ -2,3 +2,5 @@ certs/*.pem
 secrets/
 .env
 *.log
+nginx/nginx.native.conf
+hysteria/config.yaml

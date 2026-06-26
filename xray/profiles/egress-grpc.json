@@ -11,7 +11,7 @@
       "settings": {
         "clients": [
           {
-            "id": "8f0dfb0b-e5f1-4580-9b87-ef9c2aad1beb"
+            "id": "<VLESS_UUID>"
           }
         ],
         "decryption": "none"
@@ -30,7 +30,7 @@
           "serverNames": [
             "tesla.com"
           ],
-          "privateKey": "SCbv_saLwkkNiLOBjvUckCMbI2Wzw4VwYMCYbNCXV2Q",
+          "privateKey": "<REALITY_PRIVATE_KEY>",
           "shortIds": [
             ""
           ]

@@ -1,0 +1,13 @@
+services:
+  hysteria:
+    image: tobyxdd/hysteria:latest
+    container_name: proxy-hysteria
+    restart: unless-stopped
+    command: server -c /etc/hysteria/config.yaml
+    ports:
+      - "443:443/udp"
+      - "443:443/tcp"
+    volumes:
+      - ./hysteria/config.yaml:/etc/hysteria/config.yaml:ro
+      - ./certs:/etc/hysteria/certs:ro
+      - ./www:/etc/hysteria/www:ro

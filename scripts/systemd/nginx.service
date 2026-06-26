@@ -1,0 +1,18 @@
+[Unit]
+Description=Nginx decoy TLS for denko entry (Reality fallback)
+Documentation=https://nginx.org/en/docs/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+PIDFile=/run/nginx-denko.pid
+ExecStartPre=/usr/bin/nginx -t -c REPO_ROOT/nginx/nginx.native.conf
+ExecStart=/usr/bin/nginx -c REPO_ROOT/nginx/nginx.native.conf -g 'pid /run/nginx-denko.pid;'
+ExecReload=/usr/bin/nginx -s reload -c REPO_ROOT/nginx/nginx.native.conf -g 'pid /run/nginx-denko.pid;'
+ExecStop=/usr/bin/nginx -s quit -c REPO_ROOT/nginx/nginx.native.conf -g 'pid /run/nginx-denko.pid;'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

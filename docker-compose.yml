@@ -18,7 +18,7 @@ services:
     depends_on:
       - nginx
     ports:
-      - "443:443"
+      - "${XRAY_LISTEN_PORT:-443}:${XRAY_LISTEN_PORT:-443}"
     networks:
       - proxy_net
     volumes:

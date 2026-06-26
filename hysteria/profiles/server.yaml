@@ -1,0 +1,20 @@
+listen: <LISTEN>
+
+tls:
+  cert: <CERT_DIR>/fullchain.pem
+  key: <CERT_DIR>/privkey.pem
+
+auth:
+  type: password
+  password: <HY2_PASSWORD>
+
+masquerade:
+  type: file
+  file:
+    dir: <WWW_DIR>
+
+bandwidth:
+  up: 50 mbps
+  down: 200 mbps
+
+ignoreClientBandwidth: false

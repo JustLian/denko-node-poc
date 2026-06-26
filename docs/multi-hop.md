@@ -39,9 +39,11 @@ flowchart LR
 | Node | Role | Profile | Client connects? |
 |------|------|---------|------------------|
 | **Egress** | Final exit to the internet | `egress-xhttp.json` or `egress-tcp.json` | Yes (single-hop) or no (bridge-only) |
-| **Bridge** | Split routing + relay | `bridge-xhttp.json` | Yes — use **bridge domain** in client URI |
+| **Bridge** | Split routing + relay | `bridge-tcp.json` or `bridge-xhttp.json` | Yes — use **bridge domain** in client URI |
 
 Both nodes use the same Self-Stealth stack: Reality fallback to internal Nginx with Let's Encrypt on each domain.
+
+**Client inbound** can be `tcp` (Vision) or `xhttp`. The **bridge→egress chain** always uses xHTTP on egress (egress must be set up with `--transport xhttp` and `secrets/egress-peer.env` copied to bridge/entry).
 
 ## Setup order
 
@@ -49,7 +51,7 @@ Always configure **egress first**, then **bridge**.
 
 ### 1. Egress (abroad VPS)
 
-Use xHTTP for the bridge chain (required for multi-hop in this repo):
+Use xHTTP on egress for the bridge chain (required for multi-hop in this repo):
 
 ```bash
 cd poc-server
@@ -75,7 +77,7 @@ Copy `secrets/egress-peer.env` securely to your bridge VPS (scp, ansible vault, 
 cd poc-server
 sudo python3 scripts/setup.py \
   --role bridge \
-  --transport xhttp \
+  --transport tcp \
   --domain bridge.example.ru \
   --email you@example.ru \
   --egress-peer-file ./secrets/egress-peer.env \
